@@ -65,9 +65,9 @@ export class SessionManager {
     private async validateSession(context: BrowserContext): Promise<boolean> {
         const page = await context.newPage();
         try {
-            await page.goto(TEC_HOME_URL, { waitUntil: 'domcontentloaded', timeout: 15_000 });
+            await page.goto(TEC_HOME_URL, { waitUntil: 'networkidle', timeout: 15_000 });
             const isLoggedIn = await page.evaluate(() => {
-                return !document.querySelector('form[action*="login"]');
+                return !document.querySelector('#mail-input');
             });
             return isLoggedIn;
         } catch {

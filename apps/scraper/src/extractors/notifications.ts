@@ -17,8 +17,9 @@ export async function extractNotifications(
         await page.goto(TEC_NOTIFICATIONS_URL, { waitUntil: 'networkidle', timeout: 30_000 });
 
         // Wait for the new Angular Material layout notification list
-        await page.waitForSelector('a.notification', { timeout: 15_000 }).catch(() => {
-            console.log('[Extractor] No notification elements found.');
+        await page.waitForSelector('a.notification', { timeout: 15_000 }).catch(async () => {
+            console.log('[Extractor] No notification elements found. Capturing diagnostic screenshot.');
+            await page.screenshot({ path: '/app/data/notifications_empty.png' });
         });
 
         // Extract raw data from the DOM
