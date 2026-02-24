@@ -89,109 +89,49 @@ export async function extractNotifications(
  */
 async function resolveDocumentFiles(context: BrowserContext, docLink: string): Promise<NonNullable<RawNotification['files']>> {
     const tab = await context.newPage();
-    const interceptedUrls: string[] = [];
-
-    // Strategy A: Network Interception (attach before navigation)
-    tab.on('response', (response) => {
-        const url = response.url();
-        const type = response.headers()['content-type'] ?? '';
-        if (
-            url.includes('/file-storage/download') ||
-            type.includes('application/pdf') ||
-            type.includes('application/vnd') ||
-            type.includes('octet-stream')
-        ) {
-            interceptedUrls.push(url);
-        }
-    });
 
     try {
         console.log(`[Extractor] Navigating to resolve documents: ${docLink}`);
-        // Allow time for SPA rendering, network idle
-        await tab.goto(docLink, { waitUntil: 'networkidle', timeout: 25000 });
+        // Wait until document list container has rendered
+        await tab.goto(docLink, { waitUntil: 'networkidle', timeout: 30_000 });
 
-        const files: NonNullable<RawNotification['files']> = [];
-
-        // Strategy B: DOM Parsing
-        const domFiles = await tab.evaluate((sourceUrl) => {
-            const fileLinks = document.querySelectorAll('a[href*="file-storage/view"], a[href*="file-storage/download"]');
-            return Array.from(fileLinks)
-                .map(link => {
-                    const el = link as HTMLAnchorElement;
-                    return {
-                        file_name: el.textContent?.trim() || 'Documento sin nombre',
-                        download_url: el.href,
-                        source_url: sourceUrl
-                    };
-                })
-                .filter(f => f.file_name.length > 0);
-        }, docLink);
-
-        if (domFiles.length > 0) {
-            console.log(`[Extractor] Resolved ${domFiles.length} file(s) via DOM Strategy.`);
-            return domFiles;
-        }
-
-        // Check if Strategy A caught anything if DOM had no explicit UI anchors
-        if (interceptedUrls.length > 0) {
-            console.log(`[Extractor] Resolved via Network Interception Strategy.`);
-            return interceptedUrls.map((url, idx) => ({
-                file_name: `Documento_${idx + 1}`,
-                download_url: url,
-                source_url: docLink
-            }));
-        }
-
-        // Strategy C: API Fallback (GL_FOLDER_ID parsing)
-        const folderId = await tab.evaluate(() => {
-            const scripts = Array.from(document.querySelectorAll('script'));
-            for (const s of scripts) {
-                const el = s as HTMLElement;
-                const m = el.textContent?.match(/GL_FOLDER_ID\s*=\s*(\d+)/);
-                if (m) return m[1];
-            }
-            return null;
+        // Wait for the new Angular Material layout file rows
+        await tab.waitForSelector('.fs-element.formatList', { timeout: 15_000 }).catch(() => {
+            console.log('[Extractor] Wait for .fs-element.formatList timed out.');
         });
 
-        if (folderId) {
-            const apiUrl = `/dotlrn/file-storage/files-api?folder_id=${folderId}`;
-            const result = await tab.evaluate(async (url) => {
-                try {
-                    const res = await fetch(url, { credentials: 'include' });
-                    const text = await res.text();
-                    return { status: res.status, body: text.substring(0, 2000) };
-                } catch (e) {
-                    return { status: 0, body: String(e) };
+        // Use Angular memory space extraction method discovered by Subagent
+        const files = await tab.evaluate((sourceUrl) => {
+            const fileRows = Array.from(document.querySelectorAll('.fs-element.formatList'));
+
+            return fileRows.map(el => {
+                // @ts-ignore - access global angular variable exposed by TEC Digital
+                if (typeof angular === 'undefined') return null;
+
+                // @ts-ignore - Extract the internal data model bound to this DOM row
+                const scope = angular.element(el).isolateScope();
+                const info = scope ? scope.elementInfo : null;
+
+                if (info && info.fs_type === 'file') {
+                    // Reconstruct the hidden file download API endpoint using the object_id
+                    const baseUrl = window.location.href.split('#')[0];
+                    const downloadUrl = `${baseUrl}download/${encodeURIComponent(info.name)}?file_id=${info.object_id}`;
+
+                    return {
+                        file_name: info.name as string,
+                        download_url: downloadUrl,
+                        source_url: sourceUrl
+                    };
                 }
-            }, apiUrl);
+                return null;
+            }).filter((f): f is NonNullable<typeof f> => f !== null);
+        }, docLink);
 
-            try {
-                const data = JSON.parse(result.body) as any;
-                const items = Array.isArray(data) ? data : (data.files || data.items || []);
+        console.log(`[Extractor] Resolved ${files.length} document(s) via Angular Scope injection.`);
+        return files;
 
-                const fallbackFiles = items
-                    .filter((f: any) => f.name && (f.url || f.download_url || f.href))
-                    .map((f: any) => ({
-                        file_name: String(f.name),
-                        download_url: String((f.url || f.download_url || f.href)).startsWith('http')
-                            ? String((f.url || f.download_url || f.href))
-                            : 'https://tecdigital.tec.ac.cr' + String((f.url || f.download_url || f.href)),
-                        source_url: docLink
-                    }));
-
-                if (fallbackFiles.length > 0) {
-                    console.log(`[Extractor] Resolved ${fallbackFiles.length} file(s) via API Fallback Strategy.`);
-                    return fallbackFiles;
-                }
-            } catch {
-                console.log('[Extractor] Response is not JSON in Fallback Strategy.');
-            }
-        }
-
-        console.log(`[Extractor] All strategies failed for ${docLink}. Returning empty.`);
-        return [];
     } catch (e) {
-        console.log(`[Extractor] Error resolving files for ${docLink}: ${String(e)}`);
+        console.log(`[Extractor] Error resolving files for ${docLink}:`, e);
         return [];
     } finally {
         await tab.close();
