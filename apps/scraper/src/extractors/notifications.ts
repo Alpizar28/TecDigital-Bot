@@ -164,7 +164,7 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
 
         console.log(`[Extractor] Angular Scope Evaluation returned ${files.length} valid / ${evalResults.length} total raw results.`);
         if (files.length === 0 && evalResults.length > 0) {
-            console.log(`[Extractor] DIAGNOSTIC: First failed evaluation:`, evalResults[0]);
+            console.log(`[Extractor] DIAGNOSTIC: Failed evaluations dump:`, JSON.stringify(evalResults, null, 2));
         }
 
         console.log(`[Extractor] Resolved ${files.length} document(s) via Angular stabilization.`);
