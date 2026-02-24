@@ -72,6 +72,11 @@ export function buildServer(): FastifyInstance {
             try {
                 const browser = await ensureBrowser();
                 context = await sessionManager.getContext(browser, username, password);
+
+                if (!context) {
+                    throw new Error("Failed to initialize browser context.");
+                }
+
                 let notifications = await extractNotifications(context);
 
                 // Apply keyword filter if provided
