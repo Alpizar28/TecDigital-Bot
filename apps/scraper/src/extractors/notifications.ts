@@ -1,11 +1,11 @@
 import type { BrowserContext } from 'playwright';
 import type { RawNotification } from '@tec-brain/types';
 
-const TEC_NOTIFICATIONS_URL = 'https://tecdigital.tec.ac.cr/dotlrn/notifications';
+const TEC_HOME_URL = 'https://tecdigital.tec.ac.cr/dotlrn/';
 
 /**
  * Extracts all notification items from the TEC Digital notification panel.
- * Navigates to the notifications URL and parses the AngularJS-rendered list.
+ * Clicks the notification bell on the dashboard to trigger the Angular dropdown.
  */
 export async function extractNotifications(
     context: BrowserContext,
@@ -14,7 +14,13 @@ export async function extractNotifications(
     const notifications: RawNotification[] = [];
 
     try {
-        await page.goto(TEC_NOTIFICATIONS_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+        await page.goto(TEC_HOME_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+
+        // Click the Notification Bell
+        await page.evaluate(() => {
+            const bell = document.getElementById('platform_user_notifications');
+            if (bell) bell.click();
+        });
 
         // Wait for the new Angular Material layout notification list
         await page.waitForSelector('a.notification', { timeout: 15_000 }).catch(async () => {
