@@ -62,7 +62,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 150M
+          memory: 250M
         reservations:
           memory: 50M
     env_file: .env
