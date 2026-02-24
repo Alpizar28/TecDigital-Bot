@@ -122,7 +122,8 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
                 }
 
                 try {
-                    const scope = winAny.angular.element(el).isolateScope();
+                    const ngNode = winAny.angular.element(el);
+                    const scope = ngNode.isolateScope() || ngNode.scope();
                     const info = scope ? scope.elementInfo : null;
 
                     if (info && info.fs_type === 'file') {
@@ -153,7 +154,12 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
                         }
                     }
 
-                    return { error: 'info null or not file, and no object_id in dom', infoType: info?.fs_type, name: info?.name, innerText: el.textContent?.substring(0, 50) };
+                    return {
+                        error: 'info null or not file, and no object_id in dom',
+                        infoType: info?.fs_type,
+                        name: info?.name,
+                        innerText: el.textContent ? el.textContent.replace(/\s+/g, ' ').substring(0, 100) : ''
+                    };
                 } catch (e) {
                     return { error: 'isolateScope threw exception', detail: String(e) };
                 }
