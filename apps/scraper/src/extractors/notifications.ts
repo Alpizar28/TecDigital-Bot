@@ -95,9 +95,15 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
         // Wait until document list container has rendered
         await tab.goto(docLink, { waitUntil: 'networkidle', timeout: 30_000 });
 
-        // Wait for the Angular asynchronous fetch to populate the file rows with text
-        await tab.waitForSelector('.fs-element.formatList p', { timeout: 15_000 }).catch(async () => {
-            console.log('[Extractor] Wait for .fs-element.formatList p timed out. Capturing diagnostic screenshot.');
+        // Wait for the Angular asynchronous fetch to populate the file rows with actual text characters
+        await tab.waitForFunction(() => {
+            const paragraphs = document.querySelectorAll('.fs-element.formatList p');
+            for (let i = 0; i < paragraphs.length; i++) {
+                if (paragraphs[i].textContent && paragraphs[i].textContent!.trim().length > 0) return true;
+            }
+            return false;
+        }, { timeout: 15_000 }).catch(async () => {
+            console.log('[Extractor] Wait for .fs-element.formatList text timed out. Capturing diagnostic screenshot.');
             await tab.screenshot({ path: '/app/data/resolve_timeout.png', fullPage: true });
         });
 
