@@ -96,8 +96,9 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
         await tab.goto(docLink, { waitUntil: 'networkidle', timeout: 30_000 });
 
         // Wait for the new Angular Material layout file rows
-        await tab.waitForSelector('.fs-element.formatList', { timeout: 15_000 }).catch(() => {
-            console.log('[Extractor] Wait for .fs-element.formatList timed out.');
+        await tab.waitForSelector('.fs-element.formatList', { timeout: 15_000 }).catch(async () => {
+            console.log('[Extractor] Wait for .fs-element.formatList timed out. Capturing diagnostic screenshot.');
+            await tab.screenshot({ path: '/app/data/resolve_timeout.png', fullPage: true });
         });
 
         // Use Angular memory space extraction method discovered by Subagent
