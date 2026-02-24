@@ -95,15 +95,18 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
         // Wait until document list container has rendered
         await tab.goto(docLink, { waitUntil: 'networkidle', timeout: 30_000 });
 
-        // Wait for the new Angular Material layout file rows
-        await tab.waitForSelector('.fs-element.formatList', { timeout: 15_000 }).catch(async () => {
-            console.log('[Extractor] Wait for .fs-element.formatList timed out. Capturing diagnostic screenshot.');
+        // Wait for the new Angular Material layout file rows to be fully compiled
+        await tab.waitForSelector('.fs-element.formatList.ng-isolate-scope', { timeout: 15_000 }).catch(async () => {
+            console.log('[Extractor] Wait for .fs-element.formatList.ng-isolate-scope timed out. Capturing diagnostic screenshot.');
             await tab.screenshot({ path: '/app/data/resolve_timeout.png', fullPage: true });
         });
 
+        // Angular race condition: give SPA 1500ms to attach isolateScope objects to memory
+        await tab.waitForTimeout(1500);
+
         // Use Angular memory space extraction method discovered by Subagent
         const evalResults = await tab.evaluate((sourceUrl) => {
-            const fileRows = Array.from(document.querySelectorAll('.fs-element.formatList'));
+            const fileRows = Array.from(document.querySelectorAll('.fs-element.formatList.ng-isolate-scope'));
 
             return fileRows.map(el => {
                 // @ts-ignore
@@ -117,7 +120,6 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
                     const info = scope ? scope.elementInfo : null;
 
                     if (info && info.fs_type === 'file') {
-                        // Reconstruct the hidden file download API endpoint using the object_id
                         const baseUrl = window.location.href.split('#')[0];
                         const downloadUrl = `${baseUrl}download/${encodeURIComponent(info.name)}?file_id=${info.object_id}`;
 
@@ -127,7 +129,25 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
                             source_url: sourceUrl
                         };
                     }
-                    return { error: 'info null or not file', infoType: info?.fs_type, name: info?.name };
+
+                    // Fallback to DOM parsing if memory is mangled
+                    const html = el.innerHTML || '';
+                    const objectIdMatch = html.match(/(?:object_id|file_id)["':=\s]+(\d+)/i) || el.id.match(/\d+/) || el.getAttribute('value')?.match(/\d+/);
+                    const nameMatch = el.querySelector('p')?.textContent?.trim() || el.textContent?.trim() || 'Documento sin nombre';
+
+                    if (objectIdMatch && objectIdMatch.length > 0) {
+                        const objId = objectIdMatch[0].replace(/\D/g, '');
+                        if (objId.length > 5) {
+                            const baseUrl = window.location.href.split('#')[0];
+                            return {
+                                file_name: nameMatch,
+                                download_url: `${baseUrl}download/${encodeURIComponent(nameMatch)}?file_id=${objId}`,
+                                source_url: sourceUrl
+                            };
+                        }
+                    }
+
+                    return { error: 'info null or not file, and no object_id in dom', infoType: info?.fs_type, name: info?.name, innerText: el.textContent?.substring(0, 50) };
                 } catch (e) {
                     return { error: 'isolateScope threw exception', detail: String(e) };
                 }
@@ -136,12 +156,12 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
 
         const files = evalResults.filter((f): f is NonNullable<RawNotification['files']>[0] => !('error' in f));
 
-        console.log(`[Extractor] Angular Scope Evaluation returned ${evalResults.length} raw results.`);
+        console.log(`[Extractor] Angular Scope Evaluation returned ${files.length} valid / ${evalResults.length} total raw results.`);
         if (files.length === 0 && evalResults.length > 0) {
             console.log(`[Extractor] DIAGNOSTIC: First failed evaluation:`, evalResults[0]);
         }
 
-        console.log(`[Extractor] Resolved ${files.length} document(s) via Angular Scope injection.`);
+        console.log(`[Extractor] Resolved ${files.length} document(s) via Angular stabilization.`);
         return files;
 
     } catch (e) {
