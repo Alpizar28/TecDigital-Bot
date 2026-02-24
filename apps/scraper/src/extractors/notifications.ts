@@ -102,31 +102,44 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
         });
 
         // Use Angular memory space extraction method discovered by Subagent
-        const files = await tab.evaluate((sourceUrl) => {
+        const evalResults = await tab.evaluate((sourceUrl) => {
             const fileRows = Array.from(document.querySelectorAll('.fs-element.formatList'));
 
             return fileRows.map(el => {
-                // @ts-ignore - access global angular variable exposed by TEC Digital
-                if (typeof angular === 'undefined') return null;
-
-                // @ts-ignore - Extract the internal data model bound to this DOM row
-                const scope = angular.element(el).isolateScope();
-                const info = scope ? scope.elementInfo : null;
-
-                if (info && info.fs_type === 'file') {
-                    // Reconstruct the hidden file download API endpoint using the object_id
-                    const baseUrl = window.location.href.split('#')[0];
-                    const downloadUrl = `${baseUrl}download/${encodeURIComponent(info.name)}?file_id=${info.object_id}`;
-
-                    return {
-                        file_name: info.name as string,
-                        download_url: downloadUrl,
-                        source_url: sourceUrl
-                    };
+                // @ts-ignore
+                const winAny = window as any;
+                if (!winAny.angular) {
+                    return { error: 'window.angular undefined', html: el.innerHTML.substring(0, 100) };
                 }
-                return null;
-            }).filter((f): f is NonNullable<typeof f> => f !== null);
+
+                try {
+                    const scope = winAny.angular.element(el).isolateScope();
+                    const info = scope ? scope.elementInfo : null;
+
+                    if (info && info.fs_type === 'file') {
+                        // Reconstruct the hidden file download API endpoint using the object_id
+                        const baseUrl = window.location.href.split('#')[0];
+                        const downloadUrl = `${baseUrl}download/${encodeURIComponent(info.name)}?file_id=${info.object_id}`;
+
+                        return {
+                            file_name: info.name as string,
+                            download_url: downloadUrl,
+                            source_url: sourceUrl
+                        };
+                    }
+                    return { error: 'info null or not file', infoType: info?.fs_type, name: info?.name };
+                } catch (e) {
+                    return { error: 'isolateScope threw exception', detail: String(e) };
+                }
+            });
         }, docLink);
+
+        const files = evalResults.filter((f): f is NonNullable<RawNotification['files']>[0] => !('error' in f));
+
+        console.log(`[Extractor] Angular Scope Evaluation returned ${evalResults.length} raw results.`);
+        if (files.length === 0 && evalResults.length > 0) {
+            console.log(`[Extractor] DIAGNOSTIC: First failed evaluation:`, evalResults[0]);
+        }
 
         console.log(`[Extractor] Resolved ${files.length} document(s) via Angular Scope injection.`);
         return files;
