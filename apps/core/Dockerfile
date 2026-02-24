@@ -9,19 +9,7 @@ COPY apps/core/ ./apps/core/
 
 RUN pnpm install --frozen-lockfile
 
-ENV NODE_OPTIONS="--max-old-space-size=400"
-
-RUN pnpm --filter @tec-brain/types build
-RUN pnpm --filter @tec-brain/database build
-RUN pnpm --filter @tec-brain/telegram build
-RUN pnpm --filter @tec-brain/drive build
-RUN pnpm --filter @tec-brain/core build
-
-FROM node:20-slim AS production
-WORKDIR /app
-COPY --from=base /app ./
-
 ENV NODE_ENV=production
 
 EXPOSE 3002
-CMD ["node", "apps/core/dist/index.js"]
+CMD ["pnpm", "tsx", "apps/core/src/index.ts"]
