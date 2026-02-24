@@ -83,9 +83,9 @@ export class SessionManager {
             console.log(`[Session] Performing login for: ${username}`);
             await page.goto(TEC_LOGIN_URL, { waitUntil: 'networkidle', timeout: 30_000 });
 
-            const userSelector = 'input[name="username"]';
-            const passSelector = 'input[name="password"]';
-            const submitSelector = 'input[type="submit"]';
+            const userSelector = '#mail-input';
+            const passSelector = '#password-input';
+            const submitSelector = 'button.md-primary';
 
             const userField = await page.$(userSelector);
             if (!userField) throw new Error('DOM Error: Formulario de login no encontrado');
