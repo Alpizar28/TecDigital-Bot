@@ -16,25 +16,26 @@ export async function extractNotifications(
     try {
         await page.goto(TEC_NOTIFICATIONS_URL, { waitUntil: 'networkidle', timeout: 30_000 });
 
-        // Wait for Angular to render the notification list
-        await page.waitForSelector('.notification-item, [ng-repeat]', { timeout: 15_000 }).catch(() => {
+        // Wait for the new Angular Material layout notification list
+        await page.waitForSelector('a.notification', { timeout: 15_000 }).catch(() => {
             console.log('[Extractor] No notification elements found.');
         });
 
         // Extract raw data from the DOM
         const rawItems = await page.evaluate(() => {
-            const items = document.querySelectorAll('.notification-item, [ng-repeat] .item');
+            const items = document.querySelectorAll('a.notification');
 
             return Array.from(items).map((el, idx) => {
-                const element = el as HTMLElement;
+                const element = el as HTMLAnchorElement;
+                const title = element.querySelector('.title')?.textContent?.trim() ?? '';
+                const desc = element.querySelector('.text')?.textContent?.trim() ?? '';
+
                 return {
                     index: idx,
-                    text: element.textContent?.trim() ?? '',
-                    link: (element.querySelector('a') as HTMLAnchorElement | null)?.href ?? '',
+                    text: `${title} - ${desc}`,
+                    link: element.href ?? '',
                     type_hint: element.className ?? '',
-                    date_text:
-                        (element.querySelector('.date, .fecha, time') as HTMLElement | null)?.textContent?.trim() ??
-                        '',
+                    date_text: element.querySelector('.date')?.textContent?.trim() ?? ''
                 };
             });
         });
