@@ -46,8 +46,8 @@ export async function insertNotification(
 
     await pool.query(
         `INSERT INTO notifications
-       (user_id, external_id, type, course, title, description, link, hash)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       (user_id, external_id, type, course, title, description, link, hash, document_status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      ON CONFLICT (user_id, external_id) DO NOTHING`,
         [
             userId,
@@ -58,7 +58,41 @@ export async function insertNotification(
             notification.description,
             notification.link,
             hash,
+            notification.document_status || null,
         ],
+    );
+}
+
+// ─── Document Queries ────────────────────────────────────────────────────────
+
+/**
+ * Returns whether a file has already been uploaded to Drive for this user.
+ */
+export async function uploadedFileExists(userId: string, fileHash: string): Promise<boolean> {
+    const pool = getPool();
+    const res = await pool.query<{ count: string }>(
+        'SELECT COUNT(*) as count FROM uploaded_files WHERE user_id = $1 AND file_hash = $2',
+        [userId, fileHash],
+    );
+    return parseInt(res.rows[0].count, 10) > 0;
+}
+
+/**
+ * Inserts a record of a successfully uploaded file to Google Drive.
+ */
+export async function insertUploadedFile(
+    userId: string,
+    course: string,
+    fileHash: string,
+    filename: string,
+    driveFileId: string,
+): Promise<void> {
+    const pool = getPool();
+    await pool.query(
+        `INSERT INTO uploaded_files (user_id, course, file_hash, filename, drive_file_id)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (user_id, file_hash) DO NOTHING`,
+        [userId, course, fileHash, filename, driveFileId],
     );
 }
 

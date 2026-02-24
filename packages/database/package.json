@@ -16,7 +16,8 @@
         "migrate": "node --loader ts-node/esm src/migrate.ts"
     },
     "dependencies": {
-        "pg": "^8.11.5"
+        "pg": "^8.11.5",
+        "@tec-brain/types": "workspace:*"
     },
     "devDependencies": {
         "@types/pg": "^8.11.5",

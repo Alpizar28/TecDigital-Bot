@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
-import { chromium, type Browser } from 'playwright';
+import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { SessionManager } from './sessions/session-manager.js';
 import { extractNotifications } from './extractors/notifications.js';
 import type { ScrapeResponse } from '@tec-brain/types';
@@ -67,10 +67,11 @@ export function buildServer(): FastifyInstance {
         async (request, reply): Promise<ScrapeResponse> => {
             const { userId } = request.params;
             const { username, password, keywords = [] } = request.body;
+            let context: BrowserContext | null = null;
 
             try {
                 const browser = await ensureBrowser();
-                const context = await sessionManager.getContext(browser, username, password);
+                context = await sessionManager.getContext(browser, username, password);
                 let notifications = await extractNotifications(context);
 
                 // Apply keyword filter if provided
@@ -94,9 +95,6 @@ export function buildServer(): FastifyInstance {
                 const error = err instanceof Error ? err.message : String(err);
                 request.log.error({ err, userId }, 'Scrape failed');
 
-                // If login fails, clear the cached context so next request tries fresh
-                sessionManager.closeContext(username);
-
                 return reply.status(500).send({
                     status: 'error',
                     user_id: userId,
@@ -104,6 +102,10 @@ export function buildServer(): FastifyInstance {
                     cookies: [],
                     error,
                 } satisfies ScrapeResponse);
+            } finally {
+                if (context) {
+                    await context.close();
+                }
             }
         },
     );

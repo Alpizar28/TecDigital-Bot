@@ -8,6 +8,7 @@ export interface User {
     id: string;
     name: string;
     tec_username: string;
+    tec_password_enc: string;
     telegram_chat_id: string;
     drive_root_folder_id: string | null;
     is_active: boolean;
@@ -17,6 +18,7 @@ export interface User {
 export interface FileReference {
     file_name: string;
     download_url: string;
+    source_url: string;
     mime_type?: string;
 }
 
@@ -28,6 +30,7 @@ export interface RawNotification {
     description: string;
     link: string;
     date: string;
+    document_status?: 'resolved' | 'unresolved';
     files?: FileReference[];
 }
 

@@ -5,6 +5,12 @@ services:
     image: postgres:15-alpine
     container_name: tec-brain-db
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 250M
+        reservations:
+          memory: 100M
     environment:
       POSTGRES_USER: tecbrain
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -27,6 +33,12 @@ services:
       dockerfile: apps/scraper/Dockerfile
     container_name: tec-brain-scraper
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 850M
+        reservations:
+          memory: 250M
     env_file: .env
     environment:
       PORT: "3001"
@@ -47,6 +59,12 @@ services:
       dockerfile: apps/core/Dockerfile
     container_name: tec-brain-core
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 150M
+        reservations:
+          memory: 50M
     env_file: .env
     environment:
       PORT: "3002"

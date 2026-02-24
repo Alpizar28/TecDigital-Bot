@@ -31,6 +31,7 @@ describe('Telegram message formatters', () => {
         id: 'u1',
         name: 'Pablo',
         tec_username: 'j.alpizar@estudiantec.cr',
+        tec_password_enc: 'encrypted',
         telegram_chat_id: '6317692621',
         drive_root_folder_id: 'folder-id',
         is_active: true,
