@@ -17,4 +17,4 @@ RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
 
 EXPOSE 3001
-CMD ["npx", "tsx", "apps/scraper/src/index.ts"]
+CMD ["npx", "tsx", "--tsconfig", "tsconfig.base.json", "apps/scraper/src/index.ts"]

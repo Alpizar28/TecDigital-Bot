@@ -12,4 +12,4 @@ RUN pnpm install --frozen-lockfile
 ENV NODE_ENV=production
 
 EXPOSE 3002
-CMD ["pnpm", "tsx", "apps/core/src/index.ts"]
+CMD ["pnpm", "tsx", "--tsconfig", "tsconfig.base.json", "apps/core/src/index.ts"]
