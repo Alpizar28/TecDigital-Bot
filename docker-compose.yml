@@ -62,9 +62,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 250M
+          memory: 400M
         reservations:
-          memory: 50M
+          memory: 100M
     env_file: .env
     environment:
       PORT: "3002"
