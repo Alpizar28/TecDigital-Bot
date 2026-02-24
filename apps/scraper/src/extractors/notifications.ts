@@ -112,7 +112,7 @@ async function resolveDocumentFiles(context: BrowserContext, docLink: string): P
 
         // Use Angular memory space extraction method discovered by Subagent
         const evalResults = await tab.evaluate((sourceUrl) => {
-            const fileRows = Array.from(document.querySelectorAll('.fs-element.formatList.ng-isolate-scope'));
+            const fileRows = Array.from(document.querySelectorAll('.fs-element.formatList'));
 
             return fileRows.map(el => {
                 // @ts-ignore
