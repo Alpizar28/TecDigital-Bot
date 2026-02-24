@@ -85,20 +85,23 @@ export class SessionManager {
 
             const userSelector = '#mail-input';
             const passSelector = '#password-input';
-            const submitSelector = 'button.md-primary';
-
             const userField = await page.$(userSelector);
             if (!userField) throw new Error('DOM Error: Formulario de login no encontrado');
 
             await page.fill(userSelector, username);
             await page.fill(passSelector, password);
-            await page.click(submitSelector);
-            await page.waitForLoadState('networkidle', { timeout: 30_000 });
+            await page.press(passSelector, 'Enter');
 
-            const loginStillPresent = await page.$(userSelector);
-            if (loginStillPresent) {
-                throw new Error('Login fallido: Credenciales inválidas o acceso denegado');
+            try {
+                await page.waitForSelector('#btnSync', { state: 'visible', timeout: 20000 });
+            } catch (error) {
+                const loginStillPresent = await page.$(userSelector);
+                if (loginStillPresent) {
+                    throw new Error('Login fallido: Credenciales inválidas o acceso denegado');
+                }
+                throw new Error('Login transition failed: Dashboard element #btnSync not found after submit');
             }
+            await page.waitForLoadState('networkidle', { timeout: 15_000 });
 
             const cookies = await context.cookies();
             this.saveCookies(
