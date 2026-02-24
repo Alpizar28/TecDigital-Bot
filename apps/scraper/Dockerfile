@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/playwright:v1.44.0-jammy AS base
+FROM mcr.microsoft.com/playwright:v1.58.2-jammy AS base
 WORKDIR /app
 
 # Install pnpm
