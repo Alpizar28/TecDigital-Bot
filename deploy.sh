@@ -13,7 +13,7 @@ git pull origin main || echo "  (First deploy, nothing to pull or branch not set
 
 echo ""
 echo ">>> [2/3] Building and starting Docker containers..."
-sudo docker-compose up -d --build
+sudo docker compose up -d --build
 
 echo ""
 echo "✅ Deployment complete! Containers are running."
@@ -21,4 +21,4 @@ echo "   Streaming logs from the Core Orchestrator (Ctrl+C to stop watching)..."
 echo ""
 
 sleep 5  # Give the containers a moment to start
-sudo docker-compose logs -f core
+sudo docker compose logs -f core
