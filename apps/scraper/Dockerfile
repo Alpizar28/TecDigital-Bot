@@ -14,6 +14,8 @@ COPY apps/scraper/ ./apps/scraper/
 # Install deps
 RUN pnpm install --frozen-lockfile
 
+ENV NODE_OPTIONS="--max-old-space-size=600"
+
 # Build
 RUN pnpm --filter @tec-brain/types build
 RUN pnpm --filter @tec-brain/scraper build
