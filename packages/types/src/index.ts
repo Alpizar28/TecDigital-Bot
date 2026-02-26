@@ -45,6 +45,7 @@ export interface StoredNotification {
     link: string | null;
     hash: string;
     sent_at: Date;
+    document_status?: 'resolved' | 'unresolved' | null;
 }
 
 // ─── Scraper API Contracts ────────────────────────────────────────────────────

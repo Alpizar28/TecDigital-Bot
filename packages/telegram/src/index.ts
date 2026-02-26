@@ -5,45 +5,34 @@ import type { User, RawNotification } from '@tec-brain/types';
 
 function formatNotice(user: User, n: RawNotification): string {
     return [
-        `<b>📌 Nueva Noticia — ${escapeHtml(n.course)}</b>`,
-        ``,
-        `<b>📅 Fecha:</b> ${escapeHtml(n.date)}`,
-        `<b>📝 Descripción:</b> ${escapeHtml(n.description)}`,
-        ``,
-        `<a href="${n.link}">🔗 Abrir en TEC Digital</a>`,
+        `<b>${escapeHtml(n.course)}</b>`,
+        escapeHtml(n.description),
+        `<a href="${n.link}">TEC Digital</a>`,
     ].join('\n');
 }
 
 function formatEvaluation(user: User, n: RawNotification): string {
     return [
-        `<b>📋 Nueva Evaluación — ${escapeHtml(n.course)}</b>`,
-        ``,
-        `<b>📅 Fecha:</b> ${escapeHtml(n.date)}`,
-        `<b>📌 Descripción:</b> ${escapeHtml(n.description)}`,
-        ``,
-        `<a href="${n.link}">🔗 Ver Evaluación</a>`,
+        `<b>${escapeHtml(n.course)}</b>`,
+        escapeHtml(n.description),
+        `<a href="${n.link}">Evaluación</a>`,
     ].join('\n');
 }
 
-function formatDocumentSent(user: User, n: RawNotification, fileName: string): string {
+function formatDocumentSent(user: User, n: RawNotification, fileName: string, driveFileId: string): string {
+    const driveUrl = `https://drive.google.com/file/d/${encodeURIComponent(driveFileId)}/view`;
     return [
-        `<b>📁 Documento Guardado — ${escapeHtml(n.course)}</b>`,
-        ``,
-        `<b>📄 Archivo:</b> ${escapeHtml(fileName)}`,
-        `<b>📅 Fecha:</b> ${escapeHtml(n.date)}`,
-        ``,
-        `✅ Subido a tu Google Drive en <i>${escapeHtml(user.name)}/${escapeHtml(n.course)}</i>`,
+        `<b>${escapeHtml(n.course)}</b>`,
+        escapeHtml(fileName),
+        `<a href="${driveUrl}">Abrir en Drive</a>`,
     ].join('\n');
 }
 
 function formatDocumentLink(user: User, n: RawNotification): string {
     return [
-        `<b>📁 Nuevo Documento — ${escapeHtml(n.course)}</b>`,
-        ``,
-        `<b>📅 Fecha:</b> ${escapeHtml(n.date)}`,
-        `<b>📝 Descripción:</b> ${escapeHtml(n.description)}`,
-        ``,
-        `<a href="${n.link}">🔗 Ver Documentos del Curso</a>`,
+        `<b>${escapeHtml(n.course)}</b>`,
+        escapeHtml(n.description),
+        `<a href="${n.link}">Documentos del curso</a>`,
     ].join('\n');
 }
 
@@ -87,8 +76,8 @@ export class TelegramService {
         await this.sendMessage(user.telegram_chat_id, formatEvaluation(user, n));
     }
 
-    async sendDocumentSaved(user: User, n: RawNotification, fileName: string): Promise<void> {
-        await this.sendMessage(user.telegram_chat_id, formatDocumentSent(user, n, fileName));
+    async sendDocumentSaved(user: User, n: RawNotification, fileName: string, driveFileId: string): Promise<void> {
+        await this.sendMessage(user.telegram_chat_id, formatDocumentSent(user, n, fileName, driveFileId));
     }
 
     async sendDocumentLink(user: User, n: RawNotification): Promise<void> {

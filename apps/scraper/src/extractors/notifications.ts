@@ -196,9 +196,20 @@ function classifyType(className: string, text: string): RawNotification['type'] 
 }
 
 function extractCourse(text: string): string {
-    // Heuristic: TEC notifications usually start with the course name
-    const match = text.match(/^([^:–\-\n]{5,60}?)[\s:–\-]/);
-    return match?.[1]?.trim() ?? 'Curso Desconocido';
+    // TEC notifications usually prepend the course name before a separator.
+    // Prefer explicit separators and avoid splitting on the first space.
+    const normalized = text.replace(/\s+/g, ' ').trim();
+    const separators = [' - ', ' – ', ': '];
+
+    for (const separator of separators) {
+        const idx = normalized.indexOf(separator);
+        if (idx > 0) {
+            const candidate = normalized.slice(0, idx).trim();
+            if (candidate.length >= 5) return candidate;
+        }
+    }
+
+    return normalized.slice(0, 80) || 'Curso Desconocido';
 }
 
 function hashString(str: string): string {

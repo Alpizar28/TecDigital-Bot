@@ -2,25 +2,23 @@ import { describe, it, expect, vi } from 'vitest';
 
 // ─── Test: Deduplication Logic ────────────────────────────────────────────────
 
-describe('notificationExists', () => {
-    it('returns true when notification is already in DB', async () => {
-        const mockPool = {
-            query: vi.fn().mockResolvedValue({ rows: [{ count: '1' }] }),
-        };
+describe('getNotificationState', () => {
+    it('returns exists true with document status', async () => {
         vi.mock('@tec-brain/database', () => ({
-            notificationExists: vi.fn().mockResolvedValue(true),
+            getNotificationState: vi.fn().mockResolvedValue({ exists: true, document_status: 'resolved' }),
         }));
 
-        const { notificationExists } = await import('@tec-brain/database');
-        const result = await notificationExists('user-uuid', 'notif_abc123');
-        expect(result).toBe(true);
+        const { getNotificationState } = await import('@tec-brain/database');
+        const result = await getNotificationState('user-uuid', 'notif_abc123');
+        expect(result.exists).toBe(true);
+        expect(result.document_status).toBe('resolved');
     });
 
-    it('returns false when notification is new', async () => {
-        const { notificationExists } = await import('@tec-brain/database');
-        vi.mocked(notificationExists).mockResolvedValueOnce(false);
-        const result = await notificationExists('user-uuid', 'notif_xyz999');
-        expect(result).toBe(false);
+    it('returns exists false when notification is new', async () => {
+        const { getNotificationState } = await import('@tec-brain/database');
+        vi.mocked(getNotificationState).mockResolvedValueOnce({ exists: false, document_status: null });
+        const result = await getNotificationState('user-uuid', 'notif_xyz999');
+        expect(result.exists).toBe(false);
     });
 });
 

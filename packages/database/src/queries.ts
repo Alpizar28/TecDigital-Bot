@@ -32,6 +32,26 @@ export async function notificationExists(userId: string, externalId: string): Pr
 }
 
 /**
+ * Returns whether a notification exists, and its document_status (if present).
+ */
+export async function getNotificationState(
+    userId: string,
+    externalId: string,
+): Promise<{ exists: boolean; document_status: RawNotification['document_status'] | null }> {
+    const pool = getPool();
+    const res = await pool.query<{ document_status: RawNotification['document_status'] | null }>(
+        'SELECT document_status FROM notifications WHERE user_id = $1 AND external_id = $2 LIMIT 1',
+        [userId, externalId],
+    );
+
+    if (res.rowCount === 0) {
+        return { exists: false, document_status: null };
+    }
+
+    return { exists: true, document_status: res.rows[0].document_status ?? null };
+}
+
+/**
  * Inserts a notification record. Ignores conflicts (already sent).
  */
 export async function insertNotification(
@@ -60,6 +80,23 @@ export async function insertNotification(
             hash,
             notification.document_status || null,
         ],
+    );
+}
+
+/**
+ * Updates the document_status for an existing notification.
+ */
+export async function updateNotificationDocumentStatus(
+    userId: string,
+    externalId: string,
+    status: NonNullable<RawNotification['document_status']>,
+): Promise<void> {
+    const pool = getPool();
+    await pool.query(
+        `UPDATE notifications
+         SET document_status = $3
+         WHERE user_id = $1 AND external_id = $2`,
+        [userId, externalId, status],
     );
 }
 
