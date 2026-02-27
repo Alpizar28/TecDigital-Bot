@@ -1,5 +1,6 @@
 import type { BrowserContext } from 'playwright';
 import type { RawNotification } from '@tec-brain/types';
+import axios from 'axios';
 
 const TEC_HOME_URL = 'https://tecdigital.tec.ac.cr/dotlrn/';
 
@@ -78,6 +79,124 @@ export async function extractNotifications(
     }
 
     return notifications;
+}
+
+/**
+ * Iterates through notification elements in the DOM sequentially. 
+ * For each notification, extracts the data, resolves files (if document),
+ * dispatches it to the core via HTTP, and if successful (200 OK), clicks 
+ * the 'x' (delete) button on that specific notification in the DOM.
+ */
+export async function processNotificationsSequentially(
+    context: BrowserContext,
+    userId: string,
+    dispatchUrl: string,
+    cookies: any[],
+    keywords: string[] = []
+): Promise<void> {
+    const page = await context.newPage();
+
+    try {
+        await page.goto(TEC_HOME_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+
+        // Click the Notification Bell
+        await page.evaluate(() => {
+            const bell = document.getElementById('platform_user_notifications');
+            if (bell) bell.click();
+        });
+
+        // Wait for the new Angular Material layout notification list
+        await page.waitForSelector('a.notification', { timeout: 15_000 }).catch(async () => {
+            console.log('[Extractor] No notification elements found for sequential processing.');
+        });
+
+        const notificationHandles = await page.$$('a.notification');
+        console.log(`[Extractor] Found ${notificationHandles.length} notifications to process sequentially.`);
+
+        let index = 0;
+        for (const handle of notificationHandles) {
+            index++;
+            try {
+                // Use the handle to evaluate and grab data for this specific row.
+                const itemData = await handle.evaluate((el, idx) => {
+                    const title = el.querySelector('.title')?.textContent?.trim() ?? '';
+                    const desc = el.querySelector('.text')?.textContent?.trim() ?? '';
+
+                    return {
+                        index: idx,
+                        text: `${title} - ${desc}`,
+                        link: (el as HTMLAnchorElement).href ?? '',
+                        type_hint: el.className ?? '',
+                        date_text: el.querySelector('.date')?.textContent?.trim() ?? ''
+                    };
+                }, index);
+
+                if (!itemData.link) continue;
+
+                const type = classifyType(itemData.type_hint, itemData.text);
+                const course = extractCourse(itemData.text);
+
+                if (keywords.length > 0 && !keywords.some(kw => course.toLowerCase().includes(kw.toLowerCase()))) {
+                    console.log(`[Extractor] Skipping notification ${index} (filtered by keywords)`);
+                    continue;
+                }
+
+                let files: NonNullable<RawNotification['files']> | undefined = undefined;
+                let document_status: RawNotification['document_status'] = undefined;
+
+                if (type === 'documento') {
+                    // This creates a separate tab so we don't lose the handles in `page`
+                    const resolved = await resolveDocumentFiles(context, itemData.link);
+                    files = resolved;
+                    document_status = resolved.length > 0 ? 'resolved' : 'unresolved';
+                }
+
+                const parsed: RawNotification = {
+                    external_id: `notif_${hashString(`${itemData.link}${itemData.text.slice(0, 40)}`)}`,
+                    type,
+                    course,
+                    title: itemData.text.slice(0, 100),
+                    description: itemData.text,
+                    link: itemData.link,
+                    date: itemData.date_text || new Date().toISOString().slice(0, 10),
+                    files,
+                    document_status,
+                };
+
+                // Dispatch to Core internally
+                const response = await axios.post(dispatchUrl, {
+                    userId,
+                    notification: parsed,
+                    cookies,
+                }, { timeout: 120_000 });
+
+                if (response.status === 200) {
+                    console.log(`[Extractor] Dispatch success for ${parsed.external_id}. Clicking delete button.`);
+                    // Subagent found the exact selector for the X button
+                    const closeBtn = await handle.$('i.notification-delete');
+                    if (closeBtn) {
+                        try {
+                            // Ensure the element is visible by hovering the parent
+                            await handle.hover();
+                            await closeBtn.click({ timeout: 5000 });
+                            await page.waitForTimeout(500); // Give Angular a moment to remove it from DOM
+                        } catch (e) {
+                            console.log(`[Extractor] Warning: Found close button for ${parsed.external_id} but failed to click it.`);
+                        }
+                    } else {
+                        console.log(`[Extractor] Warning: Could not find delete button inside notification ${parsed.external_id}`);
+                    }
+                } else {
+                    console.log(`[Extractor] Dispatch returned status ${response.status} for ${parsed.external_id}. Skipping delete.`);
+                }
+            } catch (err) {
+                const errMsg = err instanceof Error ? err.message : String(err);
+                console.log(`[Extractor] Error processing notification ${index}:`, errMsg);
+            }
+        }
+    } finally {
+        await page.close();
+    }
 }
 
 /**

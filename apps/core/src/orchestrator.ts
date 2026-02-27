@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getActiveUsers, decrypt } from '@tec-brain/database';
+import { getActiveUsers, getUserById, decrypt } from '@tec-brain/database';
 import { TelegramService } from '@tec-brain/telegram';
 import { DriveService } from '@tec-brain/drive';
 import { dispatch } from './dispatcher.js';
@@ -60,37 +60,34 @@ export async function runOrchestrationCycle(): Promise<void> {
     }
 }
 
+export async function handleInternalDispatch(
+    userId: string,
+    notification: import('@tec-brain/types').RawNotification,
+    cookies: ScrapeResponse['cookies']
+): Promise<void> {
+    const user = await getUserById(userId);
+    if (!user) throw new Error('User not found');
+    await dispatch(user, notification, cookies, telegram, drive);
+}
+
 async function processUser(user: Awaited<ReturnType<typeof getActiveUsers>>[0]): Promise<void> {
     console.log(`[Orchestrator] Scraping for: ${user.name} (${user.tec_username})`);
 
     const password = decrypt(user.tec_password_enc);
 
     const response = await axios.post<ScrapeResponse>(
-        `${SCRAPER_URL}/scrape/${user.id}`,
-        { username: user.tec_username, password },
-        { timeout: 120_000 },
+        `${SCRAPER_URL}/process-sequential/${user.id}`,
+        { 
+            username: user.tec_username, 
+            password,
+            dispatchUrl: `http://core:${process.env.PORT ?? '3002'}/api/internal-dispatch`
+        },
+        { timeout: 300_000 }, // Generous timeout for sequential processing
     );
 
     if (response.data.status === 'error') {
         throw new Error(response.data.error || 'Unknown scraper error');
     }
 
-    const { notifications, cookies } = response.data;
-    console.log(`[Orchestrator] Got ${notifications.length} notifications for ${user.name}`);
-
-    for (const notification of notifications) {
-        try {
-            await dispatch(user, notification, cookies, telegram, drive);
-        } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : String(err);
-            console.error(JSON.stringify({
-                level: 'ERROR',
-                user_id: user.id,
-                external_id: notification.external_id,
-                type: notification.type,
-                action: 'dispatch_wrapper',
-                error_message: errorMsg,
-            }));
-        }
-    }
+    console.log(`[Orchestrator] Sequential scrape finished for ${user.name}`);
 }

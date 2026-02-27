@@ -2,7 +2,8 @@ import 'dotenv/config';
 import Fastify from 'fastify';
 import cron from 'node-cron';
 import { getPool, runMigrations } from '@tec-brain/database';
-import { runOrchestrationCycle } from './orchestrator.js';
+import { runOrchestrationCycle, handleInternalDispatch } from './orchestrator.js';
+import type { RawNotification, ScrapeResponse } from '@tec-brain/types';
 
 const PORT = parseInt(process.env.PORT ?? '3002', 10);
 const CRON_SCHEDULE = process.env.CRON_SCHEDULE ?? '*/5 * * * *'; // Every 5 min
@@ -25,6 +26,19 @@ async function main() {
     fastify.post('/api/run-now', async () => {
         setImmediate(() => void runOrchestrationCycle());
         return { status: 'triggered' };
+    });
+
+    fastify.post<{
+        Body: { userId: string; notification: RawNotification; cookies: ScrapeResponse['cookies'] }
+    }>('/api/internal-dispatch', async (request, reply) => {
+        try {
+            const { userId, notification, cookies } = request.body;
+            await handleInternalDispatch(userId, notification, cookies);
+            return { status: 'success' };
+        } catch (error) {
+            request.log.error(error);
+            return reply.status(500).send({ status: 'error', error: String(error) });
+        }
     });
 
     await fastify.listen({ port: PORT, host: '0.0.0.0' });

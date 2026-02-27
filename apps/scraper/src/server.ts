@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
 import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { SessionManager } from './sessions/session-manager.js';
-import { extractNotifications } from './extractors/notifications.js';
+import { extractNotifications, processNotificationsSequentially } from './extractors/notifications.js';
 import type { ScrapeResponse } from '@tec-brain/types';
 
 const SESSION_DIR = process.env.SESSION_DIR ?? './data/sessions';
@@ -99,6 +99,74 @@ export function buildServer(): FastifyInstance {
             } catch (err) {
                 const error = err instanceof Error ? err.message : String(err);
                 request.log.error({ err, userId }, 'Scrape failed');
+
+                return reply.status(500).send({
+                    status: 'error',
+                    user_id: userId,
+                    notifications: [],
+                    cookies: [],
+                    error,
+                } satisfies ScrapeResponse);
+            } finally {
+                if (context) {
+                    await context.close();
+                }
+            }
+        },
+    );
+
+    // ── Sequential Scrape Endpoint ────────────────────────────────────────────
+    fastify.post<{
+        Params: { userId: string };
+        Body: { username: string; password: string; keywords?: string[]; dispatchUrl: string };
+    }>(
+        '/process-sequential/:userId',
+        {
+            schema: {
+                params: {
+                    type: 'object',
+                    properties: { userId: { type: 'string' } },
+                    required: ['userId'],
+                },
+                body: {
+                    type: 'object',
+                    properties: {
+                        username: { type: 'string' },
+                        password: { type: 'string' },
+                        dispatchUrl: { type: 'string', format: 'uri' },
+                        keywords: { type: 'array', items: { type: 'string' } },
+                    },
+                    required: ['username', 'password', 'dispatchUrl'],
+                },
+            },
+        },
+        async (request, reply): Promise<ScrapeResponse> => {
+            const { userId } = request.params;
+            const { username, password, dispatchUrl, keywords = [] } = request.body;
+            let context: BrowserContext | null = null;
+
+            try {
+                const browser = await ensureBrowser();
+                context = await sessionManager.getContext(browser, username, password);
+
+                if (!context) {
+                    throw new Error("Failed to initialize browser context.");
+                }
+
+                const cookies = await sessionManager.getCookies(context);
+
+                // Call the new sequential processor
+                const results = await processNotificationsSequentially(context, userId, dispatchUrl, cookies, keywords);
+
+                return reply.send({
+                    status: 'success',
+                    user_id: userId,
+                    notifications: [], // Return empty array since they were dispatched individually
+                    cookies,
+                } satisfies ScrapeResponse);
+            } catch (err) {
+                const error = err instanceof Error ? err.message : String(err);
+                request.log.error({ err, userId }, 'Sequential scrape failed');
 
                 return reply.status(500).send({
                     status: 'error',
