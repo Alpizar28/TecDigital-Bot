@@ -1,28 +1,12 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import sensible from '@fastify/sensible';
-import { chromium, type Browser, type BrowserContext } from 'playwright';
 import { SessionManager } from './sessions/session-manager.js';
 import { extractNotifications, processNotificationsSequentially } from './extractors/notifications.js';
 import type { ScrapeResponse } from '@tec-brain/types';
 
 const SESSION_DIR = process.env.SESSION_DIR ?? './data/sessions';
 
-let globalBrowser: Browser | null = null;
 let sessionManager: SessionManager;
-
-async function ensureBrowser(): Promise<Browser> {
-    if (!globalBrowser || !globalBrowser.isConnected()) {
-        globalBrowser = await chromium.launch({
-            headless: true,
-            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-        });
-        globalBrowser.on('disconnected', () => {
-            console.log('[Browser] Browser disconnected');
-            globalBrowser = null;
-        });
-    }
-    return globalBrowser;
-}
 
 export function buildServer(): FastifyInstance {
     const fastify = Fastify({
@@ -67,17 +51,11 @@ export function buildServer(): FastifyInstance {
         async (request, reply): Promise<ScrapeResponse> => {
             const { userId } = request.params;
             const { username, password, keywords = [] } = request.body;
-            let context: BrowserContext | null = null;
 
             try {
-                const browser = await ensureBrowser();
-                context = await sessionManager.getContext(browser, username, password);
+                const client = await sessionManager.getClient(username, password);
 
-                if (!context) {
-                    throw new Error("Failed to initialize browser context.");
-                }
-
-                let notifications = await extractNotifications(context);
+                let notifications = await extractNotifications(client);
 
                 // Apply keyword filter if provided
                 if (keywords.length > 0) {
@@ -88,7 +66,7 @@ export function buildServer(): FastifyInstance {
                     );
                 }
 
-                const cookies = await sessionManager.getCookies(context);
+                const cookies = await sessionManager.getCookies(client);
 
                 return reply.send({
                     status: 'success',
@@ -107,10 +85,6 @@ export function buildServer(): FastifyInstance {
                     cookies: [],
                     error,
                 } satisfies ScrapeResponse);
-            } finally {
-                if (context) {
-                    await context.close();
-                }
             }
         },
     );
@@ -143,20 +117,13 @@ export function buildServer(): FastifyInstance {
         async (request, reply): Promise<ScrapeResponse> => {
             const { userId } = request.params;
             const { username, password, dispatchUrl, keywords = [] } = request.body;
-            let context: BrowserContext | null = null;
 
             try {
-                const browser = await ensureBrowser();
-                context = await sessionManager.getContext(browser, username, password);
-
-                if (!context) {
-                    throw new Error("Failed to initialize browser context.");
-                }
-
-                const cookies = await sessionManager.getCookies(context);
+                const client = await sessionManager.getClient(username, password);
+                const cookies = await sessionManager.getCookies(client);
 
                 // Call the new sequential processor
-                const results = await processNotificationsSequentially(context, userId, dispatchUrl, cookies, keywords);
+                const results = await processNotificationsSequentially(client, userId, dispatchUrl, cookies, keywords);
 
                 return reply.send({
                     status: 'success',
@@ -175,19 +142,9 @@ export function buildServer(): FastifyInstance {
                     cookies: [],
                     error,
                 } satisfies ScrapeResponse);
-            } finally {
-                if (context) {
-                    await context.close();
-                }
             }
         },
     );
-
-    fastify.addHook('onClose', async () => {
-        if (globalBrowser) {
-            await globalBrowser.close();
-        }
-    });
 
     return fastify;
 }

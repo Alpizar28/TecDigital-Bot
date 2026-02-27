@@ -44,7 +44,7 @@ var puppeteer_extra_plugin_stealth_1 = __importDefault(require("puppeteer-extra-
 playwright_extra_1.chromium.use((0, puppeteer_extra_plugin_stealth_1.default)());
 function runInspector() {
     return __awaiter(this, void 0, void 0, function () {
-        var browser, context, notificationEndpoint, requestHeaders, page, username, password, e_1, e_2;
+        var browser, context, notificationEndpoint, requestHeaders, page, username, password, docUrl, e_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0: return [4 /*yield*/, playwright_extra_1.chromium.launch({ headless: true })];
@@ -62,23 +62,20 @@ function runInspector() {
                     page = _a.sent();
                     page.on('request', function (request) {
                         var url = request.url();
-                        if (url.includes('notific') || url.includes('api') || url.includes('ajax')) {
-                            console.log("\n[Network] Intercepted Request: ".concat(request.method(), " ").concat(url));
-                            if (url.includes('new-form')) {
-                                console.log('\n[!] LOGIN POST REQUEST DETECTED:');
-                                console.log("[!] POST HEADERS:", request.headers());
-                                console.log("[!] POST BODY:", request.postData());
-                            }
+                        var type = request.resourceType();
+                        // Log all XHR/Fetch requests to find the file storage API
+                        if (type === 'xhr' || type === 'fetch') {
+                            console.log("\n[Network] Intercepted XHR/Fetch: ".concat(request.method(), " ").concat(url));
                             if (request.method() === 'POST' && url.includes('ajax')) {
-                                console.log("\n[!] AJAX POST REQUEST DETECTED: ".concat(url));
                                 console.log("[!] POST BODY:", request.postData());
                             }
-                            if (url.includes('get_user_notifications') || url.includes('has_unread_notifications')) {
-                                notificationEndpoint = url;
-                                requestHeaders = request.headers();
-                                console.log("[!] FOUND NOTIFICATION ENDPOINT: ".concat(url));
-                                console.log("[!] HEADERS:", requestHeaders);
-                            }
+                        }
+                        if (url.includes('new-form') && request.method() === 'POST') {
+                            console.log('\n[!] LOGIN POST REQUEST DETECTED:');
+                        }
+                        if (url.includes('get_user_notifications') || url.includes('has_unread_notifications')) {
+                            notificationEndpoint = url;
+                            requestHeaders = request.headers();
                         }
                     });
                     username = process.env.TEC_USER;
@@ -89,7 +86,7 @@ function runInspector() {
                     }
                     _a.label = 4;
                 case 4:
-                    _a.trys.push([4, 18, 19, 21]);
+                    _a.trys.push([4, 12, 13, 15]);
                     console.log('[Inspector] Launching browser...');
                     console.log('[Inspector] Navigating to login...');
                     return [4 /*yield*/, page.goto('https://tecdigital.tec.ac.cr/dotlrn/', { waitUntil: 'networkidle', timeout: 30000 })];
@@ -105,41 +102,24 @@ function runInspector() {
                 case 8:
                     _a.sent();
                     console.log('[Inspector] Waiting for login to complete...');
-                    return [4 /*yield*/, page.waitForLoadState('networkidle', { timeout: 30000 })];
+                    return [4 /*yield*/, page.waitForTimeout(4000)];
                 case 9:
                     _a.sent();
-                    console.log('[Inspector] Clicking notification bell to trigger the fetch...');
-                    return [4 /*yield*/, page.click('#platform_user_notifications')];
+                    docUrl = 'https://tecdigital.tec.ac.cr/dotlrn/classes/E/EL2207/S-1-2026.CA.EL2207.2/file-storage/#/229915573#/';
+                    console.log("[Inspector] Navigating to Document URL: ".concat(docUrl));
+                    return [4 /*yield*/, page.goto(docUrl, { waitUntil: 'networkidle', timeout: 30000 })];
                 case 10:
                     _a.sent();
-                    return [4 /*yield*/, page.waitForTimeout(3000)];
+                    console.log('[Inspector] Waiting for Angular to fetch the files...');
+                    return [4 /*yield*/, page.waitForTimeout(5000)];
                 case 11:
                     _a.sent();
-                    console.log('[Inspector] Clicking the first delete button to sniff the delete endpoint...');
-                    _a.label = 12;
+                    return [3 /*break*/, 15];
                 case 12:
-                    _a.trys.push([12, 15, , 16]);
-                    return [4 /*yield*/, page.waitForSelector('i.notification-delete', { state: 'visible', timeout: 5000 })];
-                case 13:
-                    _a.sent();
-                    return [4 /*yield*/, page.click('i.notification-delete')];
-                case 14:
-                    _a.sent();
-                    console.log('[Inspector] Delete clicked! Waiting for network response.');
-                    return [3 /*break*/, 16];
-                case 15:
                     e_1 = _a.sent();
-                    console.log('[Inspector] No delete button found or timeout.');
-                    return [3 /*break*/, 16];
-                case 16: return [4 /*yield*/, page.waitForTimeout(4000)];
-                case 17:
-                    _a.sent();
-                    return [3 /*break*/, 21];
-                case 18:
-                    e_2 = _a.sent();
-                    console.error('Error during inspection:', e_2.message);
-                    return [3 /*break*/, 21];
-                case 19:
+                    console.error('Error during inspection:', e_1.message);
+                    return [3 /*break*/, 15];
+                case 13:
                     console.log('\n==================================================');
                     console.log('--- EXTRACTION COMPLETE ---');
                     console.log("Target Endpoint: ".concat(notificationEndpoint));
@@ -147,10 +127,10 @@ function runInspector() {
                     console.log(requestHeaders);
                     console.log('==================================================\n');
                     return [4 /*yield*/, browser.close()];
-                case 20:
+                case 14:
                     _a.sent();
                     return [7 /*endfinally*/];
-                case 21: return [2 /*return*/];
+                case 15: return [2 /*return*/];
             }
         });
     });

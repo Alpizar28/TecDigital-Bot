@@ -82,6 +82,21 @@ async function testApiBypass() {
         }
         console.log('==================================================\n');
 
+        // Test File Storage API directly
+        console.log('[API-Client] 3. Testing File Storage API for Document Notifications...');
+        const folderApiUrl = 'https://tecdigital.tec.ac.cr/dotlrn/file-storage/view/folder-chunk?folder_id=229915573';
+        const folderRes = await client.get(folderApiUrl, {
+            headers: {
+                'Accept': 'application/json, text/plain, */*'
+            }
+        });
+
+        console.log(`[API-Client] Folder API Status: ${folderRes.status}`);
+        console.log('\n==================================================');
+        console.log('--- EXTRACTED FOLDER CONTENTS ---');
+        console.log(JSON.stringify(folderRes.data, null, 2).substring(0, 2000));
+        console.log('==================================================\n');
+
     } catch (error) {
         console.error('[API-Client] Error occurred:', error instanceof Error ? error.message : String(error));
         if (axios.isAxiosError(error) && error.response) {

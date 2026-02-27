@@ -1,13 +1,9 @@
 import fs from 'fs';
 import path from 'path';
-import type { Browser, BrowserContext, Cookie } from 'playwright';
-import type { Cookie as AppCookie } from '@tec-brain/types';
-
-const TEC_LOGIN_URL = 'https://tecdigital.tec.ac.cr/dotlrn/';
-const TEC_HOME_URL = 'https://tecdigital.tec.ac.cr/dotlrn/';
+import { TecHttpClient } from '../clients/tec-http.client.js';
 
 /**
- * Manages browser sessions per user.
+ * Manages HTTP clients per user.
  * Sessions are persisted to disk in `sessionDir/{username}.json`.
  */
 export class SessionManager {
@@ -23,99 +19,82 @@ export class SessionManager {
         return path.join(this.sessionDir, `${safe}.json`);
     }
 
-    private loadSavedCookies(username: string): AppCookie[] | null {
+    private loadSavedCookies(username: string): any[] | null {
         const p = this.sessionPath(username);
         if (!fs.existsSync(p)) return null;
         try {
-            return JSON.parse(fs.readFileSync(p, 'utf8')) as AppCookie[];
+            return JSON.parse(fs.readFileSync(p, 'utf8'));
         } catch {
             return null;
         }
     }
 
-    private saveCookies(username: string, cookies: AppCookie[]): void {
+    private saveCookies(username: string, cookies: any[]): void {
         fs.writeFileSync(this.sessionPath(username), JSON.stringify(cookies, null, 2));
     }
 
     /**
-     * Returns an authenticated browser context.
+     * Returns an authenticated HTTP client.
      * Tries to restore from disk first. Falls back to fresh login.
      */
-    async getContext(browser: Browser, username: string, password: string): Promise<BrowserContext> {
-        const context = await browser.newContext({
-            userAgent:
-                'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        });
+    async getClient(username: string, password: string): Promise<TecHttpClient> {
+        const client = new TecHttpClient();
 
         const saved = this.loadSavedCookies(username);
         if (saved && saved.length > 0) {
-            await context.addCookies(saved as Parameters<BrowserContext['addCookies']>[0]);
-            const isValid = await this.validateSession(context);
-            if (isValid) {
-                console.log(`[Session] Restored session for: ${username}`);
-                return context;
+            // Restore tough-cookie jar
+            for (const c of saved) {
+                // toughcookie format expects a string like "key=value"
+                // The URL is usually the origin or the specific path.
+                const cookieStr = `${c.key}=${c.value}; Domain=${c.domain}; Path=${c.path}`;
+                await client.jar.setCookie(cookieStr, `https://${c.domain}${c.path}`);
             }
-            console.log(`[Session] Saved session expired. Re-logging in: ${username}`);
+
+            const isValid = await this.validateSession(client);
+            if (isValid) {
+                console.log(`[Session] Restored API session for: ${username}`);
+                return client;
+            }
+            console.log(`[Session] Saved API session expired. Re-logging in: ${username}`);
+            // Clearing the jar for a fresh login
+            client.jar.removeAllCookiesSync();
         }
 
-        await this.login(context, username, password);
-        return context;
+        await this.login(client, username, password);
+        return client;
     }
 
-    private async validateSession(context: BrowserContext): Promise<boolean> {
-        const page = await context.newPage();
+    private async validateSession(client: TecHttpClient): Promise<boolean> {
         try {
-            await page.goto(TEC_HOME_URL, { waitUntil: 'networkidle', timeout: 15_000 });
-            const isLoggedIn = await page.evaluate(() => {
-                return !document.querySelector('#mail-input');
-            });
-            return isLoggedIn;
+            // A quick check to the internal API
+            const res = await client.client.get('https://tecdigital.tec.ac.cr/tda-notifications/ajax/has_unread_notifications?');
+            return res.status === 200 && typeof res.data === 'object';
         } catch {
             return false;
-        } finally {
-            await page.close();
         }
     }
 
-    async login(context: BrowserContext, username: string, password: string): Promise<void> {
-        const page = await context.newPage();
-        try {
-            console.log(`[Session] Performing login for: ${username}`);
-            await page.goto(TEC_LOGIN_URL, { waitUntil: 'networkidle', timeout: 30_000 });
+    async login(client: TecHttpClient, username: string, password: string): Promise<void> {
+        console.log(`[Session] Performing API login for: ${username}`);
 
-            const userSelector = '#mail-input';
-            const passSelector = '#password-input';
-            const userField = await page.$(userSelector);
-            if (!userField) throw new Error('DOM Error: Formulario de login no encontrado');
+        const success = await client.login(username, password);
 
-            await page.fill(userSelector, username);
-            await page.fill(passSelector, password);
-            await page.press(passSelector, 'Enter');
-
-            try {
-                await page.waitForSelector('#btnSync', { state: 'visible', timeout: 20000 });
-            } catch (error) {
-                const loginStillPresent = await page.$(userSelector);
-                if (loginStillPresent) {
-                    throw new Error('Login fallido: Credenciales inválidas o acceso denegado');
-                }
-                throw new Error('Login transition failed: Dashboard element #btnSync not found after submit');
-            }
-            await page.waitForLoadState('networkidle', { timeout: 15_000 });
-
-            const cookies = await context.cookies();
-            this.saveCookies(
-                username,
-                cookies.map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path })),
-            );
-            console.log(`[Session] Login successful and session saved for: ${username}`);
-        } finally {
-            await page.close();
+        if (!success) {
+            throw new Error('Login fallido: Credenciales inválidas o acceso denegado por API');
         }
+
+        const rawCookies = await client.jar.getCookies('https://tecdigital.tec.ac.cr/');
+
+        this.saveCookies(
+            username,
+            rawCookies.map((c) => ({ key: c.key, value: c.value, domain: c.domain, path: c.path }))
+        );
+
+        console.log(`[Session] API Login successful and session saved for: ${username}`);
     }
 
-    async getCookies(context: BrowserContext): Promise<AppCookie[]> {
-        const raw = await context.cookies();
-        return raw.map((c) => ({ name: c.name, value: c.value, domain: c.domain, path: c.path }));
+    async getCookies(client: TecHttpClient): Promise<any[]> {
+        const raw = await client.jar.getCookies('https://tecdigital.tec.ac.cr/');
+        return raw.map((c) => ({ name: c.key, value: c.value, domain: c.domain, path: c.path }));
     }
 }

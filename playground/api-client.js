@@ -60,7 +60,7 @@ var LOGIN_URL = 'https://tecdigital.tec.ac.cr/api/login/new-form/';
 var NOTIFICATIONS_URL = 'https://tecdigital.tec.ac.cr/tda-notifications/ajax/get_user_notifications?';
 function testApiBypass() {
     return __awaiter(this, void 0, void 0, function () {
-        var username, password, defaultHeaders, loginPayload, loginRes, cookies, notifRes, notifications, error_1;
+        var username, password, defaultHeaders, loginPayload, loginRes, cookies, notifRes, notifications, folderApiUrl, folderRes, error_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
@@ -72,7 +72,7 @@ function testApiBypass() {
                     }
                     _a.label = 1;
                 case 1:
-                    _a.trys.push([1, 5, , 6]);
+                    _a.trys.push([1, 6, , 7]);
                     console.log('[API-Client] 1. Sending JSON POST to login endpoint...');
                     defaultHeaders = {
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
@@ -124,16 +124,31 @@ function testApiBypass() {
                         console.log(JSON.stringify(notifRes.data).substring(0, 500));
                     }
                     console.log('==================================================\n');
-                    return [3 /*break*/, 6];
+                    // Test File Storage API directly
+                    console.log('[API-Client] 3. Testing File Storage API for Document Notifications...');
+                    folderApiUrl = 'https://tecdigital.tec.ac.cr/dotlrn/file-storage/view/folder-chunk?folder_id=229915573';
+                    return [4 /*yield*/, client.get(folderApiUrl, {
+                            headers: {
+                                'Accept': 'application/json, text/plain, */*'
+                            }
+                        })];
                 case 5:
+                    folderRes = _a.sent();
+                    console.log("[API-Client] Folder API Status: ".concat(folderRes.status));
+                    console.log('\n==================================================');
+                    console.log('--- EXTRACTED FOLDER CONTENTS ---');
+                    console.log(JSON.stringify(folderRes.data, null, 2).substring(0, 2000));
+                    console.log('==================================================\n');
+                    return [3 /*break*/, 7];
+                case 6:
                     error_1 = _a.sent();
                     console.error('[API-Client] Error occurred:', error_1 instanceof Error ? error_1.message : String(error_1));
                     if (axios_1.default.isAxiosError(error_1) && error_1.response) {
                         console.error('[API-Client] Responded with status:', error_1.response.status);
                         console.error('[API-Client] Response body:', error_1.response.data);
                     }
-                    return [3 /*break*/, 6];
-                case 6: return [2 /*return*/];
+                    return [3 /*break*/, 7];
+                case 7: return [2 /*return*/];
             }
         });
     });

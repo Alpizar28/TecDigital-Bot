@@ -16,26 +16,23 @@ async function runInspector() {
 
     page.on('request', (request) => {
         const url = request.url();
-        if (url.includes('notific') || url.includes('api') || url.includes('ajax')) {
-            console.log(`\n[Network] Intercepted Request: ${request.method()} ${url}`);
+        const type = request.resourceType();
 
-            if (url.includes('new-form')) {
-                console.log('\n[!] LOGIN POST REQUEST DETECTED:');
-                console.log(`[!] POST HEADERS:`, request.headers());
-                console.log(`[!] POST BODY:`, request.postData());
-            }
-
+        // Log all XHR/Fetch requests to find the file storage API
+        if (type === 'xhr' || type === 'fetch') {
+            console.log(`\n[Network] Intercepted XHR/Fetch: ${request.method()} ${url}`);
             if (request.method() === 'POST' && url.includes('ajax')) {
-                console.log(`\n[!] AJAX POST REQUEST DETECTED: ${url}`);
                 console.log(`[!] POST BODY:`, request.postData());
             }
+        }
 
-            if (url.includes('get_user_notifications') || url.includes('has_unread_notifications')) {
-                notificationEndpoint = url;
-                requestHeaders = request.headers();
-                console.log(`[!] FOUND NOTIFICATION ENDPOINT: ${url}`);
-                console.log(`[!] HEADERS:`, requestHeaders);
-            }
+        if (url.includes('new-form') && request.method() === 'POST') {
+            console.log('\n[!] LOGIN POST REQUEST DETECTED:');
+        }
+
+        if (url.includes('get_user_notifications') || url.includes('has_unread_notifications')) {
+            notificationEndpoint = url;
+            requestHeaders = request.headers();
         }
     });
 
@@ -57,23 +54,15 @@ async function runInspector() {
         await page.press('#password-input', 'Enter');
 
         console.log('[Inspector] Waiting for login to complete...');
-        await page.waitForLoadState('networkidle', { timeout: 30000 });
-
-        console.log('[Inspector] Clicking notification bell to trigger the fetch...');
-        await page.click('#platform_user_notifications');
-
-        await page.waitForTimeout(3000);
-
-        console.log('[Inspector] Clicking the first delete button to sniff the delete endpoint...');
-        try {
-            await page.waitForSelector('i.notification-delete', { state: 'visible', timeout: 5000 });
-            await page.click('i.notification-delete');
-            console.log('[Inspector] Delete clicked! Waiting for network response.');
-        } catch (e) {
-            console.log('[Inspector] No delete button found or timeout.');
-        }
-
         await page.waitForTimeout(4000);
+
+        const docUrl = 'https://tecdigital.tec.ac.cr/dotlrn/classes/E/EL2207/S-1-2026.CA.EL2207.2/file-storage/#/229915573#/';
+        console.log(`[Inspector] Navigating to Document URL: ${docUrl}`);
+
+        await page.goto(docUrl, { waitUntil: 'networkidle', timeout: 30000 });
+
+        console.log('[Inspector] Waiting for Angular to fetch the files...');
+        await page.waitForTimeout(5000);
 
     } catch (e) {
         console.error('Error during inspection:', (e as Error).message);
